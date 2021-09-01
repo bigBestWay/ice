@@ -1,1 +1,4 @@
-# ice
+# ice  
+javac LinuxJavaCallNative.java  
+java LinuxJavaCallNative  
+
