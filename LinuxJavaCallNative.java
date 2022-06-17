@@ -127,6 +127,22 @@ public class LinuxJavaCallNative {
 		
 		return func_ptr;
 	}
+
+	private static void debug_show(long addr, int len){
+		try (
+			RandomAccessFile fout = new RandomAccessFile("/proc/self/mem", "rw")) {
+			byte[] debug = new byte[len];
+			fout.seek(addr);
+			fout.read(debug);
+			fout.close();
+			for(int i = 0; i < debug.length; ++i){
+				System.out.printf("%02x ", debug[i]);
+			}
+			System.out.printf("\n");
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
 	
 	public static void main(String[] args) throws IOException, ClassNotFoundException {
 		//通过/proc/self/maps获取库基础和路径，解析ELF获得导出符号地址
@@ -168,9 +184,13 @@ public class LinuxJavaCallNative {
 			    vm->functions->GetEnv(vm, (void **)&_jvmti_env, JVMTI_VERSION_1_2);
 			    return _jvmti_env;
 			}
-			
+		push    rbp
+		mov     rbp, rsp
+		mov     rax, 0xf
+		not     rax
+		and     rsp, rax
 		movabs  rax, _JNI_GetCreatedJavaVMs
-		sub     rsp, 20h
+		sub     rsp, 40h
 		xor     rsi, rsi
 		inc     rsi
 		lea     rdx, [rsp+4]
@@ -182,30 +202,46 @@ public class LinuxJavaCallNative {
 		mov     rax, [rdi]
 		call    qword ptr [rax+30h]
 		mov     rax, [rsp+10h]
-		add     rsp, 20h
+		add     rsp, 40h
+		leave
 		ret
 		*/
+		//RSP 16字节对齐
+		byte[] stack_align = {0x55, 0x48, (byte)0x89, (byte)0xe5, 0x48, (byte)0xc7, (byte)0xc0, 0xf, 0, 0, 0, 0x48, (byte)0xf7, (byte)0xd0};
+
 		byte[] movabs_rax = {0x48, (byte) 0xb8};
         ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
         buffer.order(ByteOrder.LITTLE_ENDIAN);
         buffer.putLong(0, JNI_GetCreatedJavaVMs);
         
-		byte[] b = {0x48, (byte) 0x83, (byte) 0xEC, 0x20, 0x48, 0x31, (byte) 0xF6, 0x48, (byte) 0xFF, (byte) 0xC6, 0x48, (byte) 0x8D, 0x54, 0x24, 0x04, 0x48,
+		byte[] b = {0x48, (byte) 0x83, (byte) 0xEC, 0x40, 0x48, 0x31, (byte) 0xF6, 0x48, (byte) 0xFF, (byte) 0xC6, 0x48, (byte) 0x8D, 0x54, 0x24, 0x04, 0x48,
 		          (byte) 0x8D, 0x7C, 0x24, 0x08, (byte) 0xFF, (byte) 0xD0, 0x48, (byte) 0x8B, 0x7C, 0x24, 0x08, 0x48, (byte) 0x8D, 0x74, 0x24, 0x10,
 		          (byte) 0xBA, 0x00, 0x02, 0x01, 0x30, 0x48, (byte) 0x8B, 0x07, (byte) 0xFF, 0x50, 0x30, 0x48, (byte) 0x8B, 0x44, 0x24, 0x10,
-		          0x48, (byte) 0x83, (byte) 0xC4, 0x20, (byte) 0xC3 };
+		          0x48, (byte) 0x83, (byte) 0xC4, 0x40, (byte)0xC9, (byte) 0xC3 };
 
-		byte[] backup = new byte[b.length + 8 + movabs_rax.length];
-		fout.seek(RandomAccessFile_length);
+		int shellcode_len = b.length + 8 + movabs_rax.length + stack_align.length;
+		long landingpad = RandomAccessFile_length;
+
+		byte[] backup = new byte[shellcode_len];
+		fout.seek(landingpad);
 		fout.read(backup);
+
+		/*修改前*/
+		debug_show(landingpad, shellcode_len);
 		
-		fout.seek(RandomAccessFile_length);
+		fout.seek(landingpad);
+		fout.write(stack_align);
 		fout.write(movabs_rax);
 		fout.write(buffer.array());
 		fout.write(b);
 		fout.close();
-					
-		long native_jvmtienv = fout.length();
+
+		/*shellcode读出来看看*/
+		debug_show(landingpad, shellcode_len);
+		//System.out.println("Waiting for debugger...");
+		//System.in.read();
+							
+		long native_jvmtienv = fout.length(); //触发执行
 		System.out.printf("native_jvmtienv %x\n", native_jvmtienv);
 		
 		//恢复代码
