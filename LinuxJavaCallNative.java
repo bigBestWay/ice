@@ -246,7 +246,7 @@ public class LinuxJavaCallNative {
 		
 		//恢复代码
 		fout = new RandomAccessFile("/proc/self/mem", "rw");
-		fout.seek(RandomAccessFile_length);
+		fout.seek(landingpad);
 		fout.write(backup);
 		fout.close();
 		
