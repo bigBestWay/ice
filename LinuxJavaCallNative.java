@@ -210,7 +210,9 @@ public class LinuxJavaCallNative {
 		byte[] stack_align = {0x55, 0x48, (byte)0x89, (byte)0xe5, 0x48, (byte)0x31, (byte)0xc0, (byte)0xb0, 0xf, 0x48, (byte)0xf7, (byte)0xd0, 0x48, 0x21, (byte)0xc4};
 
 		byte[] movabs_rax = {0x48, (byte) 0xb8};
-        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+        //  ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+	//  Long.BYTES 是jdk8之后才有的，Long.BYTES = 8 所以直接修改成8可以获得更好的兼容性。
+	ByteBuffer buffer = ByteBuffer.allocate(8);
         buffer.order(ByteOrder.LITTLE_ENDIAN);
         buffer.putLong(0, JNI_GetCreatedJavaVMs);
         
